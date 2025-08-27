@@ -1,7 +1,8 @@
 import 'dart:async';
+import 'dart:collection';
 import 'package:flutter/material.dart';
 
-/// --- System Bus Implementation --- ///
+/// --- System Bus Built on Dart Event Loop --- ///
 abstract class AppEvent {}
 
 class IncrementEvent extends AppEvent {}
@@ -9,19 +10,39 @@ class DecrementEvent extends AppEvent {}
 
 class EventBus {
   static final EventBus _instance = EventBus._internal();
-  final _controller = StreamController<AppEvent>.broadcast();
-
-  EventBus._internal();
   factory EventBus() => _instance;
+  EventBus._internal();
 
-  // Listen for events of specific type
-  Stream<T> on<T extends AppEvent>() {
-    return _controller.stream.where((event) => event is T).cast<T>();
+  final _handlers = HashMap<Type, List<Function>>();
+
+  /// Subscribe to a specific event type
+  void on<T extends AppEvent>(void Function(T event) handler) {
+    _handlers.putIfAbsent(T, () => []).add(handler);
   }
 
-  // Emit event
+  /// Emit an event, processed asynchronously in the event loop
   void emit(AppEvent event) {
-    _controller.add(event);
+    // Put into event queue
+    Future(() {
+      final handlers = _handlers[event.runtimeType];
+      if (handlers != null) {
+        for (final handler in handlers) {
+          handler(event); // Dispatch event
+        }
+      }
+    });
+  }
+
+  /// Optional: Emit immediately using microtask queue (higher priority)
+  void emitMicro(AppEvent event) {
+    scheduleMicrotask(() {
+      final handlers = _handlers[event.runtimeType];
+      if (handlers != null) {
+        for (final handler in handlers) {
+          handler(event);
+        }
+      }
+    });
   }
 }
 
@@ -35,7 +56,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'System Bus Counter',
+      title: 'Event Loop System Bus',
       theme: ThemeData(primarySwatch: Colors.blue),
       home: const CounterPage(),
     );
@@ -50,35 +71,20 @@ class CounterPage extends StatefulWidget {
 
 class _CounterPageState extends State<CounterPage> {
   int _counter = 0;
-  late StreamSubscription _incSub;
-  late StreamSubscription _decSub;
 
   @override
   void initState() {
     super.initState();
 
-    // Listen for Increment Events
-    _incSub = EventBus().on<IncrementEvent>().listen((_) {
-      setState(() => _counter++);
-    });
-
-    // Listen for Decrement Events
-    _decSub = EventBus().on<DecrementEvent>().listen((_) {
-      setState(() => _counter--);
-    });
-  }
-
-  @override
-  void dispose() {
-    _incSub.cancel();
-    _decSub.cancel();
-    super.dispose();
+    // Subscribe to events
+    EventBus().on<IncrementEvent>((_) => setState(() => _counter++));
+    EventBus().on<DecrementEvent>((_) => setState(() => _counter--));
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('System Bus Counter')),
+      appBar: AppBar(title: const Text('Event Loop System Bus')),
       body: Center(
         child: Text('Counter: $_counter', style: const TextStyle(fontSize: 32)),
       ),
