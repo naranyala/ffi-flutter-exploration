@@ -25,6 +25,14 @@ dependencies:
   three_dart: ^0.0.6
   three_dart_jsm: ^0.0.6
   o3d: ^3.1.0
+  flutter_markdown: ^0.6.18
+  markdown: ^7.1.1
+  flutter_syntax_view: ^4.0.0
+  # audio related
+  audioplayers: ^5.0.0
+  just_audio: ^0.9.42
+  audio_session: ^0.1.18
+  fftea: ^1.5.0+1
 
 dev_dependencies:
   flutter_test:
