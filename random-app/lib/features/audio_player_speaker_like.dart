@@ -1,12 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:audioplayers/audioplayers.dart';
-import 'package:audio_session/audio_session.dart';
-import 'package:path/path.dart' as p;
-import 'package:fftea/fftea.dart';
-import 'dart:typed_data';
-import 'dart:async';
 import 'dart:math';
+import 'dart:async';
 
 void main() {
   runApp(const AudioVisualizerApp());
@@ -18,12 +14,13 @@ class AudioVisualizerApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Audio Visualizer',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
+      title: 'Simple Audio Visualizer',
+      theme: ThemeData.dark().copyWith(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple, brightness: Brightness.dark),
         useMaterial3: true,
       ),
       home: const AudioVisualizerPage(),
+      debugShowCheckedModeBanner: false,
     );
   }
 }
@@ -35,441 +32,202 @@ class AudioVisualizerPage extends StatefulWidget {
   State<AudioVisualizerPage> createState() => _AudioVisualizerPageState();
 }
 
-class _AudioVisualizerPageState extends State<AudioVisualizerPage>
-    with TickerProviderStateMixin {
-  final _audioPlayer = AudioPlayer();
-  Float64List _fftData = Float64List(512);
+class _AudioVisualizerPageState extends State<AudioVisualizerPage> with SingleTickerProviderStateMixin {
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  final Random _random = Random();
   
-  // Animation and timing controllers
   late AnimationController _animationController;
   Timer? _updateTimer;
+
   bool _isPlaying = false;
-  String? _currentFileName;
-  
-  // FFT processor
-  late FFT _fft;
-  final Random _random = Random();
+  String? _fileName;
+  double _audioLevel = 0.0;
+  double _targetLevel = 0.0;
 
   @override
   void initState() {
     super.initState();
-    _configureAudioSession();
-    _initializeAnimation();
-    _initializeFFT();
-  }
-
-  void _initializeAnimation() {
     _animationController = AnimationController(
-      duration: const Duration(milliseconds: 100),
       vsync: this,
-    );
-    
-    // Start continuous animation loop
-    _animationController.repeat();
-  }
-
-  void _initializeFFT() {
-    _fft = FFT(1024);
-    // Initialize with empty data
-    _fftData = Float64List(512);
-  }
-
-  Future<void> _configureAudioSession() async {
-    final audioSession = await AudioSession.instance;
-    await audioSession.configure(const AudioSessionConfiguration.music());
-    
-    // Listen to player state changes
-    _audioPlayer.onPlayerStateChanged.listen((PlayerState state) {
-      setState(() {
-        _isPlaying = state == PlayerState.playing;
+      duration: const Duration(milliseconds: 150),
+    )..addListener(() {
+        setState(() {
+          // Manually interpolate between values instead of using lerpDouble
+          _audioLevel = _audioLevel + (_targetLevel - _audioLevel) * _animationController.value;
+        });
       });
-      
+
+    _audioPlayer.onPlayerStateChanged.listen((state) {
+      setState(() => _isPlaying = state == PlayerState.playing);
       if (_isPlaying) {
-        _startVisualizationUpdates();
+        _startUpdates();
       } else {
-        _stopVisualizationUpdates();
+        _stopUpdates();
       }
     });
   }
 
-  void _startVisualizationUpdates() {
+  void _startUpdates() {
     _updateTimer?.cancel();
-    _updateTimer = Timer.periodic(const Duration(milliseconds: 50), (timer) {
-      _updateFFTData();
+    _updateTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
+      _updateAudioLevel();
     });
   }
 
-  void _stopVisualizationUpdates() {
+  void _stopUpdates() {
     _updateTimer?.cancel();
-    // Gradually fade out the visualization
-    _fadeOutVisualization();
+    _targetLevel = 0.0;
+    _animationController.forward(from: 0.0);
   }
 
-  void _updateFFTData() {
-    if (!_isPlaying) return;
-
-    // Generate realistic-looking frequency data
-    // This simulates what real FFT data might look like
-    final newData = Float64List(512);
+  void _updateAudioLevel() {
+    // Simulate audio levels with a more natural pattern
+    final double baseLevel = 0.3 + 0.7 * _random.nextDouble();
+    final double smoothLevel = _targetLevel * 0.6 + baseLevel * 0.4;
     
-    for (int i = 0; i < newData.length; i++) {
-      // Create frequency response that looks more realistic
-      double baseAmplitude = _generateFrequencyAmplitude(i);
-      
-      // Add some randomness for animation effect
-      double randomFactor = 0.8 + (_random.nextDouble() * 0.4);
-      
-      // Apply smoothing to previous frame for more natural movement
-      double smoothing = 0.3;
-      double previousValue = i < _fftData.length ? _fftData[i] : 0.0;
-      
-      newData[i] = (baseAmplitude * randomFactor * (1 - smoothing)) + 
-                   (previousValue * smoothing);
-    }
-
     setState(() {
-      _fftData = newData;
+      _targetLevel = smoothLevel;
     });
-  }
-
-  double _generateFrequencyAmplitude(int frequencyBin) {
-    // Simulate realistic frequency distribution
-    double frequency = frequencyBin.toDouble();
-    double normalizedFreq = frequency / 512.0;
     
-    // Bass frequencies (0-0.1) - higher amplitude
-    if (normalizedFreq < 0.1) {
-      return 30.0 + (_random.nextDouble() * 40.0);
-    }
-    // Mid frequencies (0.1-0.4) - moderate amplitude
-    else if (normalizedFreq < 0.4) {
-      return 15.0 + (_random.nextDouble() * 25.0);
-    }
-    // High frequencies (0.4-1.0) - lower amplitude
-    else {
-      return 5.0 + (_random.nextDouble() * 15.0);
-    }
+    _animationController.forward(from: 0.0);
   }
 
-  void _fadeOutVisualization() {
-    // Create a fade-out effect when music stops
-    Timer.periodic(const Duration(milliseconds: 100), (timer) {
-      if (_isPlaying) {
-        timer.cancel();
-        return;
-      }
-      
-      bool hasData = false;
-      final newData = Float64List(_fftData.length);
-      
-      for (int i = 0; i < _fftData.length; i++) {
-        newData[i] = _fftData[i] * 0.8; // Fade factor
-        if (newData[i] > 0.5) hasData = true;
-      }
-      
-      setState(() {
-        _fftData = newData;
-      });
-      
-      // Stop fading when data is nearly zero
-      if (!hasData) {
-        timer.cancel();
-      }
-    });
-  }
+  Future<void> _pickAudio() async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(type: FileType.audio);
+    if (result == null) return;
 
-  Future<void> _selectAndPlayAudio() async {
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
-      type: FileType.audio,
-    );
+    PlatformFile file = result.files.first;
+    setState(() => _fileName = file.name);
 
-    if (result != null) {
-      PlatformFile file = result.files.first;
-      String filePath = file.path!;
-
-      try {
-        setState(() {
-          _currentFileName = file.name;
-        });
-        
-        await _audioPlayer.play(DeviceFileSource(filePath));
-        
-      } catch (e) {
-        debugPrint("Error playing audio: $e");
-        setState(() {
-          _currentFileName = null;
-        });
-      }
-    }
-  }
-
-  Future<void> _togglePlayPause() async {
-    if (_isPlaying) {
-      await _audioPlayer.pause();
-    } else {
-      await _audioPlayer.resume();
-    }
-  }
-
-  Future<void> _stopAudio() async {
     await _audioPlayer.stop();
-    setState(() {
-      _currentFileName = null;
-      _fftData = Float64List(512);
-    });
+    await _audioPlayer.play(DeviceFileSource(file.path!));
+  }
+
+  Future<void> _toggle() => _isPlaying ? _audioPlayer.pause() : _audioPlayer.resume();
+
+  Future<void> _stop() async {
+    await _audioPlayer.stop();
+    setState(() => _fileName = null);
+    _stopUpdates();
   }
 
   @override
   void dispose() {
-    _updateTimer?.cancel();
     _animationController.dispose();
     _audioPlayer.dispose();
+    _updateTimer?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final double circleSize = 150.0 + 100.0 * _audioLevel;
+    final Color circleColor = Colors.primaries[((_audioLevel * 10) % Colors.primaries.length).floor()];
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Audio Visualizer'),
-        backgroundColor: Colors.deepPurple.shade100,
+        title: const Text('Audio Pulse'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
       ),
+      extendBodyBehindAppBar: true,
       body: Container(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
+          gradient: RadialGradient(
+            center: Alignment.center,
+            radius: 1.5,
             colors: [
-              Colors.deepPurple.shade50,
-              Colors.deepPurple.shade900,
+              Colors.deepPurple.withOpacity(0.3),
+              Colors.black,
             ],
           ),
         ),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // File info display
-            if (_currentFileName != null)
-              Container(
-                padding: const EdgeInsets.all(16.0),
-                child: Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Row(
-                      children: [
-                        Icon(
-                          _isPlaying ? Icons.music_note : Icons.music_off,
-                          color: Colors.deepPurple,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _currentFileName!,
-                            style: Theme.of(context).textTheme.titleSmall,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
+            // Visualizer Circle
+            Container(
+              width: circleSize,
+              height: circleSize,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: circleColor.withOpacity(0.7),
+                boxShadow: [
+                  BoxShadow(
+                    color: circleColor.withOpacity(0.5),
+                    blurRadius: 20.0 + 30.0 * _audioLevel,
+                    spreadRadius: 5.0 * _audioLevel,
                   ),
-                ),
-              ),
-            
-            // Visualizer
-            Expanded(
-              flex: 3,
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Card(
-                  elevation: 8,
-                  child: AnimatedBuilder(
-                    animation: _animationController,
-                    builder: (context, child) {
-                      return CustomPaint(
-                        painter: _VisualizerPainter(
-                          fftData: _fftData,
-                          animationValue: _animationController.value,
-                          isPlaying: _isPlaying,
-                        ),
-                        child: const SizedBox.expand(),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ),
-            
-            // Control buttons
-            Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: _selectAndPlayAudio,
-                    icon: const Icon(Icons.folder_open),
-                    label: const Text('Select Audio'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.deepPurple,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                  
-                  if (_currentFileName != null) ...[
-                    ElevatedButton.icon(
-                      onPressed: _togglePlayPause,
-                      icon: Icon(_isPlaying ? Icons.pause : Icons.play_arrow),
-                      label: Text(_isPlaying ? 'Pause' : 'Play'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                    
-                    ElevatedButton.icon(
-                      onPressed: _stopAudio,
-                      icon: const Icon(Icons.stop),
-                      label: const Text('Stop'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                  ],
                 ],
               ),
+              child: _isPlaying 
+                ? Icon(
+                    Icons.music_note,
+                    size: 40.0,
+                    color: Colors.white.withOpacity(0.8),
+                  )
+                : Icon(
+                    Icons.music_off,
+                    size: 40.0,
+                    color: Colors.white.withOpacity(0.5),
+                  ),
+            ),
+            
+            const SizedBox(height: 40),
+            
+            // File name
+            if (_fileName != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Text(
+                  _fileName!,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.8),
+                    fontSize: 16,
+                  ),
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ),
+            
+            const SizedBox(height: 30),
+            
+            // Controls
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Pick Audio Button
+                FloatingActionButton(
+                  onPressed: _pickAudio,
+                  backgroundColor: Colors.deepPurple,
+                  child: const Icon(Icons.audio_file),
+                ),
+                
+                const SizedBox(width: 20),
+                
+                if (_fileName != null) ...[
+                  // Play/Pause Button
+                  FloatingActionButton(
+                    onPressed: _toggle,
+                    backgroundColor: _isPlaying ? Colors.orange : Colors.green,
+                    child: Icon(_isPlaying ? Icons.pause : Icons.play_arrow),
+                  ),
+                  
+                  const SizedBox(width: 20),
+                  
+                  // Stop Button
+                  FloatingActionButton(
+                    onPressed: _stop,
+                    backgroundColor: Colors.red,
+                    child: const Icon(Icons.stop),
+                  ),
+                ],
+              ],
             ),
           ],
         ),
       ),
     );
-  }
-}
-
-class _VisualizerPainter extends CustomPainter {
-  final Float64List fftData;
-  final double animationValue;
-  final bool isPlaying;
-
-  _VisualizerPainter({
-    required this.fftData,
-    required this.animationValue,
-    required this.isPlaying,
-  });
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (fftData.isEmpty) {
-      _drawIdleState(canvas, size);
-      return;
-    }
-
-    // Background
-    final backgroundPaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [Colors.deepPurple.shade900, Colors.black87],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
-    
-    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), backgroundPaint);
-
-    final numBars = (fftData.length / 4).round(); // Use fewer bars for better visibility
-    final barWidth = size.width / numBars;
-    final maxHeight = size.height * 0.8;
-
-    for (int i = 0; i < numBars; i++) {
-      final double magnitude = fftData[i * 4]; // Sample every 4th element
-      final double normalizedHeight = (magnitude / 100.0).clamp(0.0, 1.0);
-      final double barHeight = maxHeight * normalizedHeight;
-
-      // Create gradient colors based on frequency
-      final double hue = (i / numBars) * 300; // Purple to blue spectrum
-      final double saturation = 0.8 + (normalizedHeight * 0.2);
-      final double brightness = 0.4 + (normalizedHeight * 0.6);
-      
-      final barPaint = Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-          colors: [
-            HSVColor.fromAHSV(1.0, hue, saturation, brightness * 0.6).toColor(),
-            HSVColor.fromAHSV(1.0, hue, saturation, brightness).toColor(),
-          ],
-        ).createShader(Rect.fromLTWH(
-          i * barWidth,
-          size.height - barHeight,
-          barWidth * 0.8,
-          barHeight,
-        ));
-
-      // Draw bar with rounded corners
-      final rect = RRect.fromRectAndRadius(
-        Rect.fromLTWH(
-          i * barWidth + (barWidth * 0.1),
-          size.height - barHeight,
-          barWidth * 0.8,
-          barHeight,
-        ),
-        const Radius.circular(2),
-      );
-      
-      canvas.drawRRect(rect, barPaint);
-
-      // Add glow effect for active bars
-      if (normalizedHeight > 0.1) {
-        final glowPaint = Paint()
-          ..color = HSVColor.fromAHSV(
-            0.3, hue, saturation, brightness
-          ).toColor()
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
-        
-        canvas.drawRRect(rect, glowPaint);
-      }
-    }
-  }
-
-  void _drawIdleState(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.deepPurple.shade200
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-
-    // Draw a simple waveform placeholder
-    final path = Path();
-    path.moveTo(0, size.height / 2);
-    
-    for (int i = 0; i < size.width.toInt(); i += 10) {
-      final y = size.height / 2 + (sin(i * 0.1 + animationValue * 2 * pi) * 20);
-      path.lineTo(i.toDouble(), y);
-    }
-    
-    canvas.drawPath(path, paint);
-    
-    // Draw "Select Audio" text
-    final textPainter = TextPainter(
-      text: const TextSpan(
-        text: 'Select an audio file to begin visualization',
-        style: TextStyle(
-          color: Colors.deepPurple,
-          fontSize: 16,
-          fontWeight: FontWeight.w300,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    );
-    
-    textPainter.layout();
-    textPainter.paint(
-      canvas,
-      Offset(
-        (size.width - textPainter.width) / 2,
-        (size.height - textPainter.height) / 2 + 40,
-      ),
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) {
-    return true; // Always repaint for smooth animation
   }
 }
