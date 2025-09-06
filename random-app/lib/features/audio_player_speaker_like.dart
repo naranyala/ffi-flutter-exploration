@@ -4,26 +4,26 @@ import 'package:audioplayers/audioplayers.dart';
 import 'dart:math';
 import 'dart:async';
 
-void main() {
-  runApp(const AudioVisualizerApp());
-}
-
-class AudioVisualizerApp extends StatelessWidget {
-  const AudioVisualizerApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Simple Audio Visualizer',
-      theme: ThemeData.dark().copyWith(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple, brightness: Brightness.dark),
-        useMaterial3: true,
-      ),
-      home: const AudioVisualizerPage(),
-      debugShowCheckedModeBanner: false,
-    );
-  }
-}
+// void main() {
+//   runApp(const AudioVisualizerApp());
+// }
+//
+// class AudioVisualizerApp extends StatelessWidget {
+//   const AudioVisualizerApp({super.key});
+//
+//   @override
+//   Widget build(BuildContext context) {
+//     return MaterialApp(
+//       title: 'Simple Audio Visualizer',
+//       theme: ThemeData.dark().copyWith(
+//         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple, brightness: Brightness.dark),
+//         useMaterial3: true,
+//       ),
+//       home: const AudioVisualizerPage(),
+//       debugShowCheckedModeBanner: false,
+//     );
+//   }
+// }
 
 class AudioVisualizerPage extends StatefulWidget {
   const AudioVisualizerPage({super.key});

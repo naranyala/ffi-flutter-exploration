@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-import './features/audio_player_speaker_like.dart';
-import './features/perform_export_media.dart';
 
 void main() => runApp(const FabPanelApp());
 
@@ -26,10 +24,9 @@ class FabPanelPage extends StatefulWidget {
 }
 
 enum MainView {
-  pageAudioTweak,
+  pageOne,
   pageTwo,
-  pageThree,
-  pageExportCenter
+  pageThree
 }
 
 // ✅ Define the MenuItem class
@@ -50,17 +47,15 @@ class _FabPanelPageState extends State<FabPanelPage>
   late AnimationController _controller;
   late Animation<Offset> _offsetAnimation;
   bool isPanelVisible = false;
-  MainView currentView = MainView.pageAudioTweak;
+  MainView currentView = MainView.pageOne;
 
   final List<MenuItem> menuItems = const [
-    MenuItem(icon: Icons.code, label: 'Audio Tweak', view:
-MainView.pageAudioTweak),
+    MenuItem(icon: Icons.code, label: 'Page 1', view:
+MainView.pageOne),
     MenuItem(icon: Icons.code, label: 'Page 2', view:
 MainView.pageTwo),
     MenuItem(icon: Icons.code, label: 'Page 3', view:
-MainView.pageThree),
-    MenuItem(icon: Icons.code, label: 'Export Center', view:
-MainView.pageExportCenter),
+MainView.pageThree)
   ];
 
   @override
@@ -129,15 +124,12 @@ MainView.pageExportCenter),
 
   Widget buildMainView() {
     switch (currentView) {
-      case MainView.pageAudioTweak:
-        // return const Center(child: Text('Page One'));  
-        return const AudioVisualizerPage();
+      case MainView.pageOne:
+        return const Center(child: Text('Page One'));  
       case MainView.pageTwo:
         return const Center(child: Text('Page Two'));
       case MainView.pageThree:
         return const Center(child: Text('Page Three'));
-      case MainView.pageExportCenter:
-        return const CardListScreen();
     }
   }
 
@@ -228,4 +220,5 @@ MainView.pageExportCenter),
     );
   }
 }
+
 
