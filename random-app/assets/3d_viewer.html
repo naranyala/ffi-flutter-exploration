@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Model Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            overflow: hidden;
+            font-family: system-ui, sans-serif;
+            background: #0e0f13;
+        }
+        
+        #container {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        #status {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            padding: 6px 10px;
+            background: rgba(0, 0, 0, 0.45);
+            color: #cfd8dc;
+            font: 12px/1.2 system-ui, sans-serif;
+            border-radius: 6px;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+    <div id="status">
+        <div id="status-text"><b>Initializing...</b></div>
+        <div id="draw-calls">Draw calls: 0</div>
+        <div id="triangles">Triangles: 0</div>
+    </div>
+
+    <!-- CDN Dependencies -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TrackballControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+
+    <script>
+        class Model3DViewer {
+            constructor(container, options = {}) {
+                this.container = container;
+                this.options = {
+                    url: 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF-Binary/Duck.glb',
+                    exposure: 1.0,
+                    ...options
+                };
+                
+                this.renderer = null;
+                this.scene = null;
+                this.camera = null;
+                this.controls = null;
+                this.mixer = null;
+                this.clock = new THREE.Clock();
+                this.animationId = null;
+                
+                this.init();
+            }
+            
+            init() {
+                this.setupScene();
+                this.setupRenderer();
+                this.setupCamera();
+                this.setupControls();
+                this.setupLighting();
+                this.setupGrid();
+                this.setupResize();
+                this.loadModel();
+                this.animate();
+            }
+            
+            setupScene() {
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color('#0e0f13');
+            }
+            
+            setupRenderer() {
+                this.renderer = new THREE.WebGLRenderer({ antialias: true });
+                this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+                this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+                this.renderer.toneMappingExposure = this.options.exposure;
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                this.container.appendChild(this.renderer.domElement);
+            }
+            
+            setupCamera() {
+                this.camera = new THREE.PerspectiveCamera(50, 1, 0.01, 100);
+                this.camera.position.set(1.8, 1.2, 2.6);
+            }
+            
+            setupControls() {
+                this.controls = new THREE.TrackballControls(this.camera, this.renderer.domElement);
+                this.controls.rotateSpeed = 4.0;
+                this.controls.zoomSpeed = 1.2;
+                this.controls.panSpeed = 0.8;
+                this.controls.staticMoving = true;
+                this.controls.dynamicDampingFactor = 0.15;
+            }
+            
+            setupLighting() {
+                this.scene.add(new THREE.HemisphereLight(0xb1e1ff, 0x1f2430, 0.6));
+                const dir = new THREE.DirectionalLight(0xffffff, 1.0);
+                dir.position.set(3, 4, 2);
+                dir.castShadow = true;
+                dir.shadow.mapSize.set(1024, 1024);
+                this.scene.add(dir);
+            }
+            
+            setupGrid() {
+                const gridSize = 5;
+                const gridDivisions = 50;
+                const grid = new THREE.GridHelper(gridSize, gridDivisions, 0x888888, 0x444444);
+                grid.position.y = 0;
+                this.scene.add(grid);
+                
+                const borderGeom = new THREE.PlaneGeometry(gridSize, gridSize);
+                const borderMat = new THREE.MeshBasicMaterial({
+                    color: 0xffffff,
+                    side: THREE.DoubleSide,
+                    transparent: true,
+                    opacity: 0.05,
+                });
+                const border = new THREE.Mesh(borderGeom, borderMat);
+                border.rotation.x = -Math.PI / 2;
+                border.position.y = -0.001;
+                this.scene.add(border);
+            }
+            
+            setupResize() {
+                const resize = () => {
+                    const w = window.innerWidth;
+                    const h = window.innerHeight;
+                    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                    this.renderer.setSize(w, h, false);
+                    this.camera.aspect = w / h;
+                    this.camera.updateProjectionMatrix();
+                };
+                resize();
+                window.addEventListener('resize', resize);
+            }
+            
+            loadModel() {
+                this.updateStatus('Loading model...');
+                const loader = new THREE.GLTFLoader();
+                
+                loader.load(
+                    this.options.url,
+                    (gltf) => {
+                        const root = gltf.scene;
+                        root.traverse((o) => {
+                            if (o.isMesh) {
+                                o.castShadow = true;
+                                o.receiveShadow = true;
+                            }
+                        });
+                        
+                        // Center & scale
+                        const box = new THREE.Box3().setFromObject(root);
+                        const size = new THREE.Vector3();
+                        const center = new THREE.Vector3();
+                        box.getSize(size);
+                        box.getCenter(center);
+                        root.position.sub(center);
+                        
+                        // Lift so bottom touches grid
+                        const minY = box.min.y - center.y;
+                        root.position.y -= minY;
+                        
+                        const maxDim = Math.max(size.x, size.y, size.z);
+                        root.scale.setScalar((1 / maxDim) * 2);
+                        
+                        this.scene.add(root);
+                        
+                        if (gltf.animations?.length) {
+                            this.mixer = new THREE.AnimationMixer(root);
+                            gltf.animations.forEach((clip) => this.mixer.clipAction(clip).play());
+                        }
+                        
+                        this.updateStatus('Ready');
+                    },
+                    (evt) => {
+                        if (evt.total) {
+                            const pct = Math.round((evt.loaded / evt.total) * 100);
+                            this.updateStatus(`Loading ${pct}%`);
+                        }
+                    },
+                    (err) => {
+                        console.error(err);
+                        this.updateStatus('Failed to load model');
+                    }
+                );
+            }
+            
+            updateStatus(text) {
+                const statusText = document.getElementById('status-text');
+                if (statusText) {
+                    statusText.innerHTML = `<b>${text}</b>`;
+                }
+            }
+            
+            updateInfo(drawCalls, triangles) {
+                const drawCallsEl = document.getElementById('draw-calls');
+                const trianglesEl = document.getElementById('triangles');
+                if (drawCallsEl) drawCallsEl.textContent = `Draw calls: ${drawCalls}`;
+                if (trianglesEl) trianglesEl.textContent = `Triangles: ${triangles}`;
+            }
+            
+            animate() {
+                this.animationId = requestAnimationFrame(() => this.animate());
+                
+                const dt = this.clock.getDelta();
+                if (this.mixer) this.mixer.update(dt);
+                if (this.controls) this.controls.update();
+                if (this.renderer && this.scene && this.camera) {
+                    this.renderer.render(this.scene, this.camera);
+                    
+                    const ri = this.renderer.info;
+                    this.updateInfo(ri.render.calls, ri.render.triangles);
+                }
+            }
+            
+            dispose() {
+                if (this.animationId) {
+                    cancelAnimationFrame(this.animationId);
+                }
+                if (this.controls) this.controls.dispose();
+                if (this.renderer) this.renderer.dispose();
+            }
+            
+            // Method to change model URL (callable from Flutter)
+            loadNewModel(url) {
+                this.options.url = url;
+                // Clear existing model
+                const objectsToRemove = [];
+                this.scene.traverse((child) => {
+                    if (child.isMesh && child.parent === this.scene) {
+                        objectsToRemove.push(child);
+                    }
+                });
+                objectsToRemove.forEach((obj) => this.scene.remove(obj));
+                
+                // Load new model
+                this.loadModel();
+            }
+        }
+        
+        // Initialize viewer
+        const container = document.getElementById('container');
+        const viewer = new Model3DViewer(container);
+        
+        // Expose methods to Flutter WebView
+        window.loadNewModel = (url) => viewer.loadNewModel(url);
+        window.setExposure = (exposure) => {
+            viewer.renderer.toneMappingExposure = exposure;
+        };
+        
+        // Notify Flutter that the viewer is ready
+        if (window.flutter_inappwebview) {
+            window.flutter_inappwebview.callHandler('onViewerReady');
+        }
+    </script>
+</body>
+</html>

@@ -4,9 +4,7 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   audioplayers_windows
-  flutter_angle
   flutter_inappwebview_windows
-  flutter_unity_widget
   url_launcher_windows
 )
 

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
 import './features/audio_player_speaker_like.dart';
-import './features/perform_export_media.dart';
+import './features/fake_equalizer.dart';
+import './features/export_all_media.dart';
+import './features/editor_for_lyrics.dart';
+import './features/shape_painter.dart';
 
 void main() => runApp(const FabPanelApp());
 
@@ -27,12 +30,12 @@ class FabPanelPage extends StatefulWidget {
 
 enum MainView {
   pageAudioTweak,
-  pageTwo,
-  pageThree,
+  pageEqualizer,
+  pageLyricsEditor,
+  pageShapePainter,
   pageExportCenter
 }
 
-// ✅ Define the MenuItem class
 class MenuItem {
   final IconData icon;
   final String label;
@@ -55,10 +58,12 @@ class _FabPanelPageState extends State<FabPanelPage>
   final List<MenuItem> menuItems = const [
     MenuItem(icon: Icons.code, label: 'Audio Tweak', view:
 MainView.pageAudioTweak),
-    MenuItem(icon: Icons.code, label: 'Page 2', view:
-MainView.pageTwo),
-    MenuItem(icon: Icons.code, label: 'Page 3', view:
-MainView.pageThree),
+    MenuItem(icon: Icons.code, label: 'Equalizer', view:
+MainView.pageEqualizer),
+    MenuItem(icon: Icons.code, label: 'Lyrics Editor', view:
+MainView.pageLyricsEditor),
+    MenuItem(icon: Icons.code, label: 'Pick Animation', view:
+MainView.pageShapePainter),
     MenuItem(icon: Icons.code, label: 'Export Center', view:
 MainView.pageExportCenter),
   ];
@@ -130,12 +135,13 @@ MainView.pageExportCenter),
   Widget buildMainView() {
     switch (currentView) {
       case MainView.pageAudioTweak:
-        // return const Center(child: Text('Page One'));  
         return const AudioVisualizerPage();
-      case MainView.pageTwo:
-        return const Center(child: Text('Page Two'));
-      case MainView.pageThree:
-        return const Center(child: Text('Page Three'));
+      case MainView.pageEqualizer:
+        return const FakeEqualizerSliders(); 
+      case MainView.pageLyricsEditor:
+        return const LyricsEditor();
+      case MainView.pageShapePainter:
+        return const ShapeSwitcher();
       case MainView.pageExportCenter:
         return const CardListScreen();
     }
